@@ -23,55 +23,81 @@ export default function Step3Summary({ menuData }: { menuData: MenuData }) {
 
   return (
     <div className="space-y-6">
-      <h3 className="text-lg font-semibold">Summary</h3>
+      {/* HEADER */}
+      <div>
+        <h3 className="text-xl font-semibold text-slate-900">Summary</h3>
+        <p className="text-sm text-slate-500">Review your menu before saving</p>
+      </div>
 
-      {/* ❌ ERROR */}
+      {/* ERROR */}
       {error && (
-        <div className="bg-red-100 text-red-600 p-3 rounded-lg text-sm">
-          {error}
+        <div className="flex items-center gap-2 bg-red-50 text-red-600 px-4 py-3 rounded-2xl text-sm">
+          ⚠️ {error}
         </div>
       )}
 
-      {/* ✅ MENU INFO */}
-      <div className="border rounded-xl p-4">
-        <h4 className="font-semibold mb-2">Menu Info</h4>
+      {/* MENU INFO */}
+      <div className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-slate-100 space-y-3">
+        <h4 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">
+          Menu Info
+        </h4>
 
-        <div className="text-sm text-gray-600 space-y-1">
+        <div className="grid grid-cols-2 gap-4 text-sm text-slate-600">
           <p>
-            <b>Name:</b> {menuData.name}
+            <span className="text-slate-400">Name</span>
+            <br />
+            {menuData.name}
           </p>
+
           <p>
-            <b>Type:</b> {menuData.type}
+            <span className="text-slate-400">Type</span>
+            <br />
+            {menuData.type}
           </p>
+
           <p>
-            <b>Price:</b> ₹{menuData.price}
+            <span className="text-slate-400">Price</span>
+            <br />₹{menuData.price/100}
           </p>
+
           <p>
-            <b>Members:</b> {menuData.minMembers} - {menuData.maxMembers}
+            <span className="text-slate-400">Members</span>
+            <br />
+            {menuData.minMembers} - {menuData.maxMembers}
           </p>
         </div>
       </div>
 
-      {/* ✅ SECTIONS */}
+      {/* SECTIONS */}
       <div className="space-y-4">
         {menuData.sections.map((section, sIndex) => (
-          <div key={sIndex} className="border rounded-xl p-4 space-y-3">
+          <div
+            key={sIndex}
+            className="bg-white rounded-2xl p-5 shadow-sm ring-1 ring-slate-100 space-y-4"
+          >
+            {/* SECTION HEADER */}
             <div>
-              <h4 className="font-semibold">{section.name}</h4>
+              <h4 className="font-semibold text-slate-900">{section.name}</h4>
 
-              <p className="text-sm text-gray-500">
+              <p className="text-xs text-slate-500 mt-1">
                 {section.selectionType === "all"
-                  ? "All Included"
-                  : `Select up to ${section.maxSelectable}`}
+                  ? "All items included"
+                  : `Select up to ${section.selection_amount}`}
               </p>
             </div>
 
             {/* ITEMS */}
-            <div className="grid grid-cols-2 gap-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               {section.items.map((item, iIndex) => (
-                <div key={iIndex} className="border rounded-lg p-3">
-                  <p className="font-medium">{item.name}</p>
-                  <p className="text-sm text-gray-500">
+                <div
+                  key={iIndex}
+                  className="bg-slate-50 rounded-xl p-3 hover:bg-slate-100 transition"
+                >
+                  <p className="text-sm font-medium text-slate-800">
+                    {item.name}
+                  </p>
+
+                  <p className="text-xs text-slate-500 mt-1 line-clamp-2">
                     {item.description || "No description"}
                   </p>
                 </div>
@@ -81,10 +107,10 @@ export default function Step3Summary({ menuData }: { menuData: MenuData }) {
         ))}
       </div>
 
-      {/* ⚠️ FINAL NOTE */}
+      {/* SUCCESS */}
       {!error && (
-        <div className="bg-green-100 text-green-700 p-3 rounded-lg text-sm">
-          Ready to save menu 🚀
+        <div className="flex items-center gap-2 bg-green-50 text-green-600 px-4 py-3 rounded-2xl text-sm">
+          Ready to save menu
         </div>
       )}
     </div>

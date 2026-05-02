@@ -52,6 +52,7 @@ const PlansModal = ({ onClose }: { onClose: () => void }) => {
               <PlanCard
                 key={plan.id}
                 plan={{
+                  id: plan.id,
                   name: formatName(plan.name),
                   duration,
                   total,

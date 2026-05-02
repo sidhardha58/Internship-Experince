@@ -1,135 +1,316 @@
-import { useState } from "react";
+/* eslint-disable react-hooks/set-state-in-effect */
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState, useEffect } from "react";
 import type { MenuData } from "../../../../dashboard/types/menu.types";
 
 import Step1MenuInfo from "./steps/Step1MenuInfo";
 import Step2Sections from "./steps/Step2Sections";
-import Step2Items from "./steps/Step2Items";
 import Step3Summary from "./steps/Step3Summary";
 
-export default function AddMenuWizard({ onClose }: { onClose: () => void }) {
-  const [step, setStep] = useState(1);
+import MenuPreviewPanel from "./components/preview/MenuPreviewPanel";
 
-  const [menuData, setMenuData] = useState<MenuData>({
+import { useCreateMenuFlow } from "../../../hooks/useCreateMenuFlow";
+import { useUpdateMenu } from "../../../hooks/useUpdateMenu";
+import { useGetMenuById } from "../../../hooks/useGetMenuById";
+
+export default function AddMenuWizard({
+  onClose,
+  menuCategoryId,
+  editData,
+}: {
+  onClose: () => void;
+  menuCategoryId: string;
+  editData?: any;
+}) {
+  const [step, setStep] = useState(1);
+  const [isClosing, setIsClosing] = useState(false);
+
+  const isEditMode = !!editData;
+
+  /* =========================
+     HOOKS
+  ========================= */
+  const { createFullMenu, loading: createLoading } = useCreateMenuFlow();
+  const { updateFullMenu, loading: updateLoading } = useUpdateMenu();
+
+  const { menu: fullMenu, loading: menuLoading } = useGetMenuById(
+    editData?._id || null,
+  );
+
+  const isSaving = isEditMode ? updateLoading : createLoading;
+
+  /* =========================
+     INITIAL STATE
+  ========================= */
+  const getInitialState = (): MenuData => ({
     name: "",
     type: "veg",
     price: 0,
     minMembers: 0,
     maxMembers: 0,
     image: null,
-    imagePreview:"",
+    imagePreview: "",
     sections: [],
+    menuCategoryId: menuCategoryId || "",
   });
 
-  const isValid = !(
-    !menuData.name ||
-    menuData.sections.length === 0 ||
-    menuData.sections.some((s) => !s.name || s.items.length === 0)
-  );
+  const [menuData, setMenuData] = useState<MenuData>(getInitialState());
 
+  /* =========================
+     SYNC CATEGORY
+  ========================= */
+  useEffect(() => {
+    if (menuCategoryId) {
+      setMenuData((prev) => ({
+        ...prev,
+        menuCategoryId,
+      }));
+    }
+  }, [menuCategoryId]);
+
+  /* =========================
+     PREFILL EDIT DATA
+  ========================= */
+  useEffect(() => {
+    if (!isEditMode || !fullMenu) return;
+
+    setMenuData({
+      name: fullMenu.name || "",
+      type: fullMenu?.category_specific_data?.is_veg ? "veg" : "nonveg",
+
+      // ✅ keep same unit as before (no pricing changes as requested)
+      price: fullMenu.price || 0,
+
+      minMembers: fullMenu?.category_specific_data?.min_people || 0,
+      maxMembers: fullMenu?.category_specific_data?.max_people || 0,
+
+      image: null,
+      imagePreview: fullMenu?.image_url?.url || "",
+
+      menuCategoryId:
+        fullMenu?.category_specific_data?.menu_category || menuCategoryId,
+
+      sections:
+        fullMenu.food_categories?.map((section: any) => ({
+          id: section._id,
+          name: section.name,
+
+          selectionType:
+            section.selection_type === "custom-select" ? "limited" : "all",
+
+          selection_amount: section.selection_amount || 0,
+
+          items:
+            section.menu_items?.map((item: any) => ({
+              id: item._id,
+              name: item.name,
+              description: item.description || "",
+              image: null,
+              imagePreview: item.url || "",
+            })) || [],
+        })) || [],
+    });
+  }, [isEditMode, fullMenu, menuCategoryId]);
+
+  /* =========================
+     VALIDATION (IMAGE REQUIRED)
+  ========================= */
+  const hasMenuImage = Boolean(menuData.image || menuData.imagePreview);
+
+  const sectionsValid =
+    menuData.sections.length > 0 &&
+    menuData.sections.every(
+      (section) =>
+        section.name.trim() !== "" &&
+        section.items.length > 0 &&
+        section.items.every(
+          (item) =>
+            item.name.trim() !== "" && (item.image || item.imagePreview), // ✅ image required
+        ),
+    );
+
+  const isValid =
+    menuData.name.trim() !== "" &&
+    menuData.price > 0 &&
+    menuData.minMembers > 0 &&
+    menuData.maxMembers >= menuData.minMembers &&
+    hasMenuImage &&
+    sectionsValid;
+
+  const canProceedStep1 =
+    menuData.name.trim() !== "" &&
+    menuData.price > 0 &&
+    menuData.minMembers > 0 &&
+    menuData.maxMembers >= menuData.minMembers &&
+    hasMenuImage;
+
+  const canProceedStep2 = sectionsValid;
+
+  /* =========================
+     NAVIGATION
+  ========================= */
+  const handleNext = () => {
+    if (step === 1 && !canProceedStep1) return;
+    if (step === 2 && !canProceedStep2) return;
+
+    setStep((prev) => prev + 1);
+  };
+
+  const handleBack = () => {
+    setStep((prev) => prev - 1);
+  };
+
+  /* =========================
+     CLOSE
+  ========================= */
+  const handleClose = () => {
+    setIsClosing(true);
+    setTimeout(() => onClose(), 300);
+  };
+
+  /* =========================
+     SAVE (CREATE / UPDATE)
+  ========================= */
+  const handleSave = async () => {
+    if (!isValid) return;
+
+    let res;
+
+    if (isEditMode) {
+      // ✅ correct usage
+      res = await updateFullMenu(menuData, editData._id);
+    } else {
+      res = await createFullMenu(menuData);
+    }
+
+    if (res?.success) {
+      handleClose();
+    } else {
+      console.error("❌ Save failed");
+    }
+  };
+
+  /* =========================
+     UI
+  ========================= */
   return (
-    <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50">
-      {/* MODAL */}
-      <div className="bg-white rounded-2xl w-full max-w-2xl max-h-[90vh] shadow-2xl flex flex-col overflow-hidden">
-        {/* HEADER */}
-        <div className="flex justify-between items-center px-6 py-5 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-800">Add New Menu</h2>
+    <div className="fixed inset-0 z-50 flex">
+      {/* OVERLAY */}
+      <div
+        className="flex-1 bg-black/40 backdrop-blur-sm"
+        onClick={handleClose}
+      />
 
-          <button
-            onClick={onClose}
-            className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100 transition"
-          >
-            ✕
-          </button>
-        </div>
+      {/* DRAWER */}
+      <div
+        className={`w-[65%] h-full bg-white shadow-2xl flex ${
+          isClosing ? "animate-slideOutRight" : "animate-slideInLeft"
+        }`}
+      >
+        {/* LEFT PREVIEW */}
+        <MenuPreviewPanel step={step} menuData={menuData} />
 
-        {/* STEPPER */}
-        <div className="px-6 pt-5 pb-4 border-b border-gray-100">
-          <div className="flex items-center justify-between">
-            {["Menu Info", "Sections & Items", "Summary"].map((label, i) => {
-              const isActive = step === i + 1;
-              const isCompleted = step > i + 1;
+        {/* RIGHT PANEL */}
+        <div className="w-[65%] flex flex-col">
+          {/* HEADER */}
+          <div className="flex justify-between items-center px-6 py-5 border-b">
+            <h2 className="text-lg font-semibold">
+              {isEditMode ? "Edit Menu" : "Add New Menu"}
+            </h2>
 
-              return (
+            <button
+              onClick={handleClose}
+              className="w-8 h-8 flex items-center justify-center rounded-full hover:bg-gray-100"
+            >
+              ✕
+            </button>
+          </div>
+
+          {/* STEPPER */}
+          <div className="px-6 py-4 border-b">
+            <div className="flex justify-between">
+              {["Menu Info", "Sections", "Summary"].map((label, i) => (
                 <div key={i} className="flex items-center gap-2">
-                  {/* STEP CIRCLE */}
                   <div
-                    className={`w-6 h-6 flex items-center justify-center text-xs rounded-full transition ${
-                      isCompleted
+                    className={`w-6 h-6 flex items-center justify-center text-xs rounded-full ${
+                      step > i + 1
                         ? "bg-green-500 text-white"
-                        : isActive
+                        : step === i + 1
                           ? "bg-blue-600 text-white"
-                          : "bg-gray-200 text-gray-500"
+                          : "bg-gray-200"
                     }`}
                   >
                     {i + 1}
                   </div>
-
-                  {/* LABEL */}
-                  <span
-                    className={`text-sm ${
-                      isActive ? "font-semibold text-gray-800" : "text-gray-400"
-                    }`}
-                  >
-                    {label}
-                  </span>
-
-                  {/* LINE */}
-                  {i < 2 && <div className="w-10 h-px bg-gray-200 ml-2" />}
+                  <span>{label}</span>
                 </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* CONTENT */}
-        <div className="px-6 py-5 overflow-y-auto flex-1 min-h-87.5">
-          {step === 1 && (
-            <Step1MenuInfo menuData={menuData} setMenuData={setMenuData} />
-          )}
-
-          {step === 2 && (
-            <div className="space-y-6">
-              <Step2Sections menuData={menuData} setMenuData={setMenuData} />
-              <Step2Items menuData={menuData} setMenuData={setMenuData} />
+              ))}
             </div>
-          )}
+          </div>
 
-          {step === 3 && <Step3Summary menuData={menuData} />}
-        </div>
+          {/* CONTENT */}
+          <div className="flex-1 overflow-y-auto p-6">
+            {isEditMode && menuLoading ? (
+              <div className="text-center text-gray-400">Loading menu...</div>
+            ) : (
+              <>
+                {step === 1 && (
+                  <Step1MenuInfo
+                    menuData={menuData}
+                    setMenuData={setMenuData}
+                  />
+                )}
 
-        {/* FOOTER */}
-        <div className="flex justify-between items-center px-6 py-4 border-t border-gray-100 bg-gray-50">
-          <button
-            disabled={step === 1}
-            onClick={() => setStep(step - 1)}
-            className="px-4 py-2 text-sm border border-gray-300 rounded-lg hover:bg-gray-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            Back
-          </button>
+                {step === 2 && (
+                  <Step2Sections
+                    menuData={menuData}
+                    setMenuData={setMenuData}
+                  />
+                )}
 
-          {step < 3 ? (
+                {step === 3 && <Step3Summary menuData={menuData} />}
+              </>
+            )}
+          </div>
+
+          {/* FOOTER */}
+          <div className="flex justify-between items-center px-6 py-4 border-t bg-gray-50">
             <button
-              onClick={() => setStep(step + 1)}
-              className="px-5 py-2 text-sm bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition shadow-sm"
+              onClick={handleBack}
+              disabled={step === 1 || isSaving}
+              className="px-4 py-2 border rounded-lg disabled:opacity-40"
             >
-              Next
+              Back
             </button>
-          ) : (
-            <button
-              disabled={!isValid}
-              onClick={() => {
-                console.log("FINAL MENU DATA:", menuData);
-                onClose();
-              }}
-              className={`px-5 py-2 text-sm rounded-lg transition shadow-sm ${
-                isValid
-                  ? "bg-green-600 text-white hover:bg-green-700"
-                  : "bg-gray-300 text-gray-500 cursor-not-allowed"
-              }`}
-            >
-              Save Menu
-            </button>
-          )}
+
+            {step < 3 ? (
+              <button
+                onClick={handleNext}
+                disabled={
+                  isSaving ||
+                  (step === 1 && !canProceedStep1) ||
+                  (step === 2 && !canProceedStep2)
+                }
+                className="px-5 py-2 bg-blue-600 text-white rounded-lg disabled:bg-gray-300"
+              >
+                Next
+              </button>
+            ) : (
+              <button
+                onClick={handleSave}
+                disabled={!isValid || isSaving}
+                className="px-5 py-2 bg-green-600 text-white rounded-lg disabled:bg-gray-300"
+              >
+                {isSaving
+                  ? isEditMode
+                    ? "Updating..."
+                    : "Saving..."
+                  : isEditMode
+                    ? "Update Menu"
+                    : "Save Menu"}
+              </button>
+            )}
+          </div>
         </div>
       </div>
     </div>

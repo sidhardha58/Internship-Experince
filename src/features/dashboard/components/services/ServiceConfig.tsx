@@ -1,6 +1,18 @@
-/* eslint-disable @typescript-eslint/no-unused-vars */
-import { useState } from "react";
-import { UtensilsCrossed, HandPlatter, Check } from "lucide-react";
+import { useMemo, useState, useEffect } from "react";
+import {
+  Pencil,
+  Clock,
+  UtensilsCrossed,
+  ConciergeBell,
+  X,
+  Users,
+} from "lucide-react";
+
+import { useMenuCategories } from "../../hooks/useMenuCategories";
+import {
+  createMenuCategory,
+  updateMenuCategory,
+} from "../../api/menuCategoryApi";
 
 type Service = {
   id: number;
@@ -14,174 +26,269 @@ type Props = {
 };
 
 export default function ServiceConfig({ selectedService }: Props) {
-  const [isActive, setIsActive] = useState(selectedService.active);
-  const [stopValue, setStopValue] = useState(2);
-  const [stopUnit, setStopUnit] = useState<"days" | "hours">("hours");
+  const { categories, fetchCategories } = useMenuCategories();
+
+  const [isEdit, setIsEdit] = useState(false);
+
+  const existingCategory = useMemo(() => {
+    return categories.find(
+      (cat) => cat.name.toLowerCase() === selectedService.name.toLowerCase(),
+    );
+  }, [categories, selectedService]);
+
+  const getInitialForm = () => ({
+    start_time: existingCategory?.start_time || "07:00",
+    end_time: existingCategory?.end_time || "11:00",
+    manage_bookings: existingCategory?.manage_bookings || 1,
+  });
+
+  const [form, setForm] = useState(getInitialForm);
+  const [backupForm, setBackupForm] = useState(getInitialForm);
 
   const [styles, setStyles] = useState<string[]>(["buffet"]);
+  const [sitDownCost, setSitDownCost] = useState<number>(0);
+
+  useEffect(() => {
+    const init = getInitialForm();
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setForm(init);
+    setBackupForm(init);
+
+    if (existingCategory?.service_styles) {
+      const newStyles: string[] = [];
+
+      if (existingCategory.service_styles.buffet?.enabled)
+        newStyles.push("buffet");
+
+      if (existingCategory.service_styles.sit_down?.enabled) {
+        newStyles.push("sitdown");
+        setSitDownCost(
+          existingCategory.service_styles.sit_down.extra_cost_per_person || 0,
+        );
+      }
+
+      setStyles(newStyles.length > 0 ? newStyles : ["buffet"]);
+    } else {
+      setStyles(["buffet"]);
+    }
+    // eslint-disable-next-line
+  }, [selectedService, existingCategory]);
 
   const toggleStyle = (type: string) => {
-    setStyles((prev) =>
-      prev.includes(type) ? prev.filter((s) => s !== type) : [...prev, type],
-    );
+    if (!isEdit) return;
+
+    setStyles((prev) => {
+      const updated = prev.includes(type)
+        ? prev.filter((s) => s !== type)
+        : [...prev, type];
+
+      return updated.length === 0 ? ["buffet"] : updated;
+    });
   };
 
-  const isSitDownActive = styles.includes("sitdown");
+  const preventWheelChange = (e: React.WheelEvent<HTMLInputElement>) => {
+    e.currentTarget.blur();
+  };
+
+  const handleSave = async () => {
+    try {
+      const safeStyles = styles.length === 0 ? ["buffet"] : styles;
+
+      const payload = {
+        name: selectedService.name,
+        start_time: form.start_time,
+        end_time: form.end_time,
+        manage_bookings: form.manage_bookings,
+        stop_before: {
+          value: 4,
+          unit: "days" as const,
+        },
+        service_styles: {
+          buffet: {
+            enabled: safeStyles.includes("buffet"),
+          },
+          sit_down: {
+            enabled: safeStyles.includes("sitdown"),
+            extra_cost_per_person: safeStyles.includes("sitdown")
+              ? sitDownCost
+              : 0,
+          },
+        },
+      };
+
+      if (existingCategory) {
+        await updateMenuCategory(existingCategory._id, payload);
+      } else {
+        await createMenuCategory(payload);
+      }
+
+      await fetchCategories();
+
+      setBackupForm(form);
+      setIsEdit(false);
+    } catch (err) {
+      console.error("Failed to save category", err);
+    }
+  };
+
+  const handleCancel = () => {
+    setForm(backupForm);
+    setIsEdit(false);
+  };
 
   return (
-    <div className="space-y-6">
-      {/* TIME */}
-      <div className="grid grid-cols-2 gap-6">
+    <div className="bg-white/70 backdrop-blur rounded-2xl p-6 space-y-8 shadow-sm">
+      {/* HEADER */}
+      <div className="flex justify-between items-center">
         <div>
-          <p className="text-sm text-gray-500 mb-2">Start Time</p>
-          <input
-            type="time"
-            defaultValue="07:00"
-            className="w-full border border-gray-200 bg-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <p className="text-sm text-gray-500 mb-2">End Time</p>
-          <input
-            type="time"
-            defaultValue="11:00"
-            className="w-full border border-gray-200 bg-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-          <p className="text-xs text-gray-400 mt-1">Must end by 12:00</p>
-        </div>
-      </div>
-
-      {/* BOOKINGS + STOP */}
-      <div className="grid grid-cols-2 gap-6">
-        <div>
-          <p className="text-sm text-gray-500 mb-2">Manage Bookings</p>
-          <input
-            placeholder="Enter booking limit"
-            className="w-full border border-gray-200 bg-white rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-
-        <div>
-          <p className="text-sm text-gray-500 mb-2">
-            Stop Accepting Orders Before
+          <h2 className="text-lg font-semibold text-gray-800">Menu Settings</h2>
+          <p className="text-sm text-gray-400">
+            Configure availability and service styles
           </p>
+        </div>
 
-          <div className="flex gap-2">
-            <input
-              type="number"
-              value={stopValue}
-              onChange={(e) => setStopValue(Number(e.target.value))}
-              className="w-1/2 border border-gray-200 bg-white rounded-xl px-4 py-3 focus:outline-none"
-            />
-
-            <select
-              value={stopUnit}
-              onChange={(e) => setStopUnit(e.target.value as "days" | "hours")}
-              className="w-1/2 border border-gray-200 bg-white rounded-xl px-4 py-3 focus:outline-none"
+        <div className="flex items-center gap-2">
+          {isEdit && (
+            <button
+              onClick={handleCancel}
+              className="flex items-center gap-1 px-3 py-1.5 text-sm rounded-lg border border-gray-200 hover:bg-gray-50 transition"
             >
-              <option value="days">Days</option>
-              <option value="hours">Hours</option>
-            </select>
-          </div>
+              <X size={14} /> Cancel
+            </button>
+          )}
+
+          <button
+            onClick={() => (isEdit ? handleSave() : setIsEdit(true))}
+            className={`flex items-center gap-2 px-4 py-1.5 text-sm rounded-lg text-white transition shadow-sm
+              ${
+                isEdit
+                  ? "bg-green-600 hover:bg-green-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }`}
+          >
+            <Pencil size={14} />
+            {isEdit ? "Save Changes" : "Edit"}
+          </button>
         </div>
       </div>
 
-      {/* SERVICE STYLE */}
-      <div>
-        <p className="text-sm text-gray-500 mb-3">Service Style Supported</p>
-
-        <div className="space-y-4">
-          {/* BUFFET */}
-          <div
-            onClick={() => toggleStyle("buffet")}
-            className={`flex items-center justify-between rounded-xl p-4 cursor-pointer border transition ${
-              styles.includes("buffet")
-                ? "border-blue-500 bg-blue-50"
-                : "border-gray-200 bg-white hover:shadow-sm"
-            }`}
-          >
-            <div className="flex items-center gap-4">
-              <div className="bg-blue-600 text-white p-3 rounded-lg">
-                <UtensilsCrossed size={20} />
-              </div>
-
-              <div>
-                <p className="font-semibold text-gray-800">Buffet Service</p>
-                <p className="text-sm text-gray-500">Self-service meal style</p>
-              </div>
-            </div>
-
-            {styles.includes("buffet") && (
-              <div className="bg-green-500 text-white w-6 h-6 rounded-full flex items-center justify-center">
-                <Check size={14} strokeWidth={3} />
-              </div>
-            )}
-          </div>
-
-          {/* SIT-DOWN */}
-          <div
-            onClick={() => toggleStyle("sitdown")}
-            className={`flex items-center justify-between rounded-xl p-4 cursor-pointer border transition ${
-              styles.includes("sitdown")
-                ? "border-blue-500 bg-blue-50"
-                : "border-gray-200 bg-white hover:shadow-sm"
-            }`}
-          >
-            <div className="flex items-center gap-4">
-              <div
-                className={`p-3 rounded-lg ${
-                  styles.includes("sitdown")
-                    ? "bg-blue-600 text-white"
-                    : "bg-gray-100 text-gray-400"
-                }`}
-              >
-                <HandPlatter size={20} />
-              </div>
-
-              <div>
-                <p className="font-semibold text-gray-800">Sit-down Service</p>
-                <p className="text-sm text-gray-500">
-                  Wait-staff table service
-                </p>
-              </div>
-            </div>
-
-            {styles.includes("sitdown") && (
-              <div className="bg-green-500 text-white w-6 h-6 rounded-full flex items-center justify-center">
-                <Check size={14} strokeWidth={3} />
-              </div>
-            )}
-          </div>
+      {/* NOTE */}
+      <div className="flex items-start gap-2 bg-yellow-50 border border-yellow-200 text-yellow-800 text-sm rounded-xl p-4">
+        <Clock size={16} className="mt-0.5" />
+        <div>
+          <span className="font-semibold">Note: </span>
+          Customers must book this service at least{" "}
+          <span className="font-medium">4 days in advance</span>.
         </div>
       </div>
 
-      {/* EXTRA COST */}
+      {/* FORM */}
       <div
-        className={`rounded-xl border p-4 ${
-          isSitDownActive
-            ? "bg-white border-gray-200"
-            : "bg-gray-100 border-gray-200 opacity-60 pointer-events-none"
+        className={`space-y-8 transition ${
+          !isEdit ? "opacity-50 pointer-events-none" : ""
         }`}
       >
-        <p className="text-sm font-medium text-gray-600 mb-3">
-          Add Extra Cost for Sit-down Service
-        </p>
+        {/* TIME SECTION */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 mb-3">
+            Service Timing
+          </h3>
 
-        <div className="flex items-center gap-2 mb-2">
-          <span className="text-gray-500">₹</span>
+          <div className="grid grid-cols-2 gap-6">
+            <input
+              type="time"
+              value={form.start_time}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, start_time: e.target.value }))
+              }
+              className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-1 focus:ring-blue-400"
+            />
 
-          <input
-            placeholder="per person"
-            className="flex-1 border border-gray-200 rounded-xl px-4 py-3 bg-white focus:outline-none"
-          />
-
-          <span className="text-sm text-gray-500">per person</span>
+            <input
+              type="time"
+              value={form.end_time}
+              onChange={(e) =>
+                setForm((p) => ({ ...p, end_time: e.target.value }))
+              }
+              className="bg-gray-50 rounded-lg px-3 py-2 focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
         </div>
 
-        <p className="text-xs text-gray-400">
-          Enter only the extra amount added to your current menu price.
-        </p>
+        {/* CAPACITY */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 mb-3">
+            Booking Capacity
+          </h3>
+
+          <div className="flex items-center gap-2">
+            <Users size={16} className="text-gray-400" />
+            <input
+              type="number"
+              value={form.manage_bookings}
+              onChange={(e) =>
+                setForm((p) => ({
+                  ...p,
+                  manage_bookings: Number(e.target.value),
+                }))
+              }
+              onWheel={preventWheelChange}
+              className="w-full bg-gray-50 rounded-lg px-3 py-2 focus:ring-1 focus:ring-blue-400"
+            />
+          </div>
+        </div>
+
+        {/* SERVICE STYLE */}
+        <div>
+          <h3 className="text-sm font-medium text-gray-700 mb-3">
+            Service Style
+          </h3>
+
+          <div className="flex gap-3">
+            <div
+              onClick={() => toggleStyle("buffet")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer transition
+                ${
+                  styles.includes("buffet")
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-gray-100 text-gray-500"
+                }`}
+            >
+              <UtensilsCrossed size={14} />
+              Buffet
+            </div>
+
+            <div
+              onClick={() => toggleStyle("sitdown")}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl cursor-pointer transition
+                ${
+                  styles.includes("sitdown")
+                    ? "bg-blue-100 text-blue-700"
+                    : "bg-gray-100 text-gray-500"
+                }`}
+            >
+              <ConciergeBell size={14} />
+              Sit-down
+            </div>
+          </div>
+
+          {/* EXTRA COST */}
+          {styles.includes("sitdown") && (
+            <div className="mt-4">
+              <p className="text-xs text-gray-400 mb-1">
+                Extra cost per person
+              </p>
+              <input
+                type="number"
+                value={sitDownCost}
+                onChange={(e) => setSitDownCost(Number(e.target.value))}
+                onWheel={preventWheelChange}
+                className="w-full bg-gray-50 rounded-lg px-3 py-2 focus:ring-1 focus:ring-blue-400"
+                placeholder="Enter amount"
+              />
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1,53 +1,79 @@
-import type { MenuData, Section } from "../../../../types/menu.types";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import { useState } from "react";
+import { Plus, Utensils } from "lucide-react";
 
-type Props = {
-  menuData: MenuData;
-  setMenuData: React.Dispatch<React.SetStateAction<MenuData>>;
-};
+import SectionForm from "../components/section/SectionForm";
+import SectionCard from "../components/section/SectionCard";
 
-export default function Step2Sections({ menuData, setMenuData }: Props) {
-  // Remove leading zeros
-  const sanitizeNumber = (value: string) => {
-    return value.replace(/^0+(?=\d)/, "");
-  };
+export default function Step2Sections({ menuData, setMenuData }: any) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
-  // ➕ Add section
-  const addSection = () => {
-    const newSection: Section = {
-      name: "",
-      selectionType: "all",
-      items: [],
+  /* =========================
+     ADD / UPDATE SECTION
+  ========================= */
+  const saveSection = (section: any) => {
+    const safeSection = {
+      // 🔥 KEEP EXISTING ID
+      id:
+        editingIndex !== null ? menuData.sections[editingIndex]?.id : undefined,
+
+      name: section?.name || "Untitled Section",
+
+      selectionType: section?.selectionType || "all",
+
+      selection_amount:
+        section?.selectionType === "limited"
+          ? Number(section?.selection_amount ?? 1)
+          : 0,
+
+      // 🔥 KEEP ITEM IDs
+      items: (section?.items || []).map((item: any, i: number) => ({
+        id:
+          editingIndex !== null
+            ? menuData.sections[editingIndex]?.items?.[i]?.id
+            : undefined,
+
+        name: item.name,
+        description: item.description || "",
+        image: item.image || null,
+        imagePreview: item.imagePreview || "",
+      })),
     };
 
-    setMenuData({
-      ...menuData,
-      sections: [...menuData.sections, newSection],
-    });
-  };
+    const updated = [...(menuData.sections || [])];
 
-  // ❌ Remove section
-  const removeSection = (index: number) => {
-    const updated = [...menuData.sections];
-    updated.splice(index, 1);
+    if (editingIndex !== null) {
+      // 🔥 UPDATE
+      updated[editingIndex] = safeSection;
+    } else {
+      // 🔥 ADD
+      updated.push(safeSection);
+    }
 
     setMenuData({
       ...menuData,
       sections: updated,
     });
+
+    setIsAdding(false);
+    setEditingIndex(null);
   };
 
-  // ✏️ Update section
-  const updateSection = (
-    index: number,
-    field: keyof Section,
-    value: unknown,
-  ) => {
-    const updated = [...menuData.sections];
+  /* =========================
+     EDIT SECTION
+  ========================= */
+  const editSection = (index: number) => {
+    setEditingIndex(index);
+    setIsAdding(true);
+  };
 
-    updated[index] = {
-      ...updated[index],
-      [field]: value,
-    };
+  /* =========================
+     DELETE SECTION
+  ========================= */
+  const deleteSection = (index: number) => {
+    const updated = [...(menuData.sections || [])];
+    updated.splice(index, 1);
 
     setMenuData({
       ...menuData,
@@ -58,109 +84,91 @@ export default function Step2Sections({ menuData, setMenuData }: Props) {
   return (
     <div className="space-y-6">
       {/* HEADER */}
-      <div className="flex justify-between items-center">
-        <div>
-          <h3 className="text-lg font-semibold">Sections</h3>
-          <p className="text-sm text-gray-500">
-            Build food groups inside this menu
-          </p>
-        </div>
-
-        <button
-          onClick={addSection}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg hover:bg-blue-700 transition"
-        >
-          + Add Section
-        </button>
+      <div>
+        <h2 className="text-xl font-semibold text-gray-900">Sections</h2>
+        <p className="text-sm text-gray-500">
+          Organize your menu into structured food categories
+        </p>
       </div>
 
       {/* EMPTY STATE */}
-      {menuData.sections.length === 0 && (
-        <div className="border border-dashed border-gray-200 rounded-xl p-6 text-center text-sm text-gray-400">
-          No sections added yet
+      {(!menuData.sections || menuData.sections.length === 0) && !isAdding && (
+        <div className="flex flex-col items-center justify-center text-center py-16 px-6 rounded-2xl bg-white shadow-sm">
+          <div className="w-16 h-16 flex items-center justify-center rounded-full bg-orange-50 mb-4">
+            <Utensils className="text-orange-500" size={28} />
+          </div>
+
+          <h3 className="text-gray-800 font-medium text-lg">No sections yet</h3>
+
+          <p className="text-gray-500 text-sm mt-1 mb-6">
+            Start by adding your first menu section
+          </p>
+
+          <button
+            onClick={() => {
+              setEditingIndex(null);
+              setIsAdding(true);
+            }}
+            className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-gray-900 text-white hover:bg-black transition"
+          >
+            <Plus size={16} />
+            Add Section
+          </button>
         </div>
       )}
 
-      {/* SECTIONS */}
+      {/* ADD / EDIT FORM */}
+      {isAdding && (
+        <div className="bg-white rounded-2xl shadow-sm p-5">
+          <SectionForm
+            initialData={
+              editingIndex !== null ? menuData.sections[editingIndex] : null
+            }
+            onSave={saveSection}
+            onCancel={() => {
+              setIsAdding(false);
+              setEditingIndex(null);
+            }}
+          />
+        </div>
+      )}
+
+      {/* SECTION LIST */}
       <div className="space-y-4">
-        {menuData.sections.map((section, index) => (
+        {(menuData.sections || []).map((section: any, index: number) => (
           <div
             key={index}
-            className="border border-gray-200 rounded-2xl p-5 space-y-4 bg-white"
+            className="bg-white rounded-2xl shadow-sm hover:shadow-md transition p-1"
           >
-            {/* TOP ROW */}
-            <div className="flex justify-between items-center gap-3">
-              <input
-                type="text"
-                placeholder="Section Name (e.g. Starters)"
-                value={section.name}
-                onChange={(e) => updateSection(index, "name", e.target.value)}
-                className="flex-1 border border-gray-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500"
-              />
-
-              <button
-                onClick={() => removeSection(index)}
-                className="text-red-500 text-sm hover:underline"
-              >
-                Delete
-              </button>
-            </div>
-
-            {/* SELECTION TYPE */}
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-sm text-gray-500">Selection Type</label>
-
-                <select
-                  value={section.selectionType}
-                  onChange={(e) =>
-                    updateSection(index, "selectionType", e.target.value)
-                  }
-                  className="w-full mt-1 border border-gray-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="all">All Included</option>
-                  <option value="limited">Limited Selection</option>
-                </select>
-              </div>
-
-              {/* MAX SELECTABLE */}
-              {section.selectionType === "limited" && (
-                <div>
-                  <label className="text-sm text-gray-500">
-                    Max Selectable
-                  </label>
-
-                  <input
-                    type="number"
-                    placeholder="e.g. 2"
-                    value={
-                      section.maxSelectable === 0 ||
-                      section.maxSelectable === undefined
-                        ? ""
-                        : section.maxSelectable
-                    }
-                    onChange={(e) =>
-                      updateSection(
-                        index,
-                        "maxSelectable",
-                        e.target.value === ""
-                          ? 0
-                          : Number(sanitizeNumber(e.target.value)),
-                      )
-                    }
-                    className="w-full mt-1 border border-gray-200 rounded-lg p-3 focus:outline-none focus:ring-2 focus:ring-blue-500
-                      appearance-none
-                      [::-webkit-inner-spin-button]:appearance-none
-                      [::-webkit-outer-spin-button]:appearance-none
-                      [moz-appearance]:textfield"
-                    onWheel={(e) => e.currentTarget.blur()}
-                  />
-                </div>
-              )}
-            </div>
+            <SectionCard
+              section={{
+                name: section.name,
+                selectionType: section.selectionType || "all",
+                selection_amount: section.selection_amount ?? 0,
+                items: section.items || [],
+              }}
+              onEdit={() => editSection(index)} // 🔥 NEW
+              onDelete={() => deleteSection(index)}
+            />
           </div>
         ))}
       </div>
+
+      {/* ADD MORE */}
+      {(menuData.sections || []).length > 0 && !isAdding && (
+        <div className="pt-2">
+          <button
+            onClick={() => {
+              setEditingIndex(null);
+              setIsAdding(true);
+            }}
+            className="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-gray-900 text-white hover:bg-black transition"
+          >
+            <Plus size={18} />
+            Add Another Section
+          </button>
+        </div>
+      )}
     </div>
   );
 }

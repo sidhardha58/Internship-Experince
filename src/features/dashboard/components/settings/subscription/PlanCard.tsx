@@ -1,6 +1,10 @@
 import { Check } from "lucide-react";
+import { useState } from "react";
+import { createSubscription } from "../../../api/settingsApi";
+import toast from "react-hot-toast";
 
 type Plan = {
+  id: string; // 🔥 IMPORTANT (needed for API)
   name: string;
   duration: string;
   total: string;
@@ -14,6 +18,31 @@ type Plan = {
 };
 
 const PlanCard = ({ plan }: { plan: Plan }) => {
+  const [loading, setLoading] = useState(false);
+
+  /* ================= SUBSCRIBE ================= */
+  const handleSubscribe = async () => {
+    try {
+      setLoading(true);
+
+      const res = await createSubscription(plan.id);
+
+      if (!res?.short_url) {
+        throw new Error("Invalid subscription response");
+      }
+
+      // ✅ Open Razorpay in new tab
+      window.open(res.short_url, "_blank");
+
+      toast.success("Complete payment in opened tab");
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to start subscription");
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div
       className={`relative rounded-2xl p-6 transition-all duration-300
@@ -74,8 +103,12 @@ const PlanCard = ({ plan }: { plan: Plan }) => {
             Current Active Plan
           </button>
         ) : (
-          <button className="w-full rounded-lg border border-gray-200 bg-white py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition">
-            Switch Plan
+          <button
+            onClick={handleSubscribe}
+            disabled={loading}
+            className="w-full rounded-lg border border-gray-200 bg-white py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+          >
+            {loading ? "Redirecting..." : "Choose Plan"}
           </button>
         )}
       </div>

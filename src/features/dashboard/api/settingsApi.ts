@@ -40,3 +40,9 @@ export const getSubscriptionPlans = async () => {
   console.log("API Response:", res.data);
   return res.data?.data || res.data || [];
 };
+
+/* ---------------- CREATE SUBSCRIPTION ---------------- */
+export const createSubscription = async (planId: string) => {
+  const res = await axiosInstance.post(`/subscriptions/create/${planId}`);
+  return res.data;
+};
